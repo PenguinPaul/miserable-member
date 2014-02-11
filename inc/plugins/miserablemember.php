@@ -18,7 +18,7 @@ function miserablemember_info()
 		"website"		=> "https://github.com/PenguinPaul/miserable-member",
 		"author"		=> "Paul H.",
 		"authorsite"	=> "http://www.paulhedman.com",
-		"version"		=> "1.0",
+		"version"		=> "1.1",
 		"guid" 			=> "",
 		"compatibility" => "*"
 	);
