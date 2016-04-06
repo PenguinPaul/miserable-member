@@ -1,4 +1,12 @@
 <?php
+/**
+ *
+ * @package    Miserable Member
+ * @author     Paul Hedman <http://www.paulhedman.com>
+ * @version    1.2
+ * @license    MIT
+ *
+ */
 
 // Disallow direct access to this file for security reasons
 if(!defined("IN_MYBB"))
@@ -6,21 +14,23 @@ if(!defined("IN_MYBB"))
 	die("Nope.  Also, the game.");
 }
 
+$plugins->add_hook("global_end", "miserablemember", 20);
+$plugins->add_hook("newthread_start", "miserablemember_post", 20);
+$plugins->add_hook("newthread_do_newthread_start", "miserablemember_post", 20);
+$plugins->add_hook("newreply_start", "miserablemember_post", 20);
+$plugins->add_hook("newreply_do_newreply_start", "miserablemember_post", 20);
 
-$plugins->add_hook("global_start", "miserablemember");
-
-//basic plugin info for ACP
 function miserablemember_info()
 {
 	return array(
 		"name"			=> "Miserable Member",
-		"description"	=> "Miserable Member, based on the vBulletin plugin called Miserable User, makes it hell for anyone caught in its grasp.  Worse than an ordinary ban, any users that are placed in Miserable Member's usergroups are constantly errored, have slow page loads, and other things that make the user think twice about doing anything on your board.",
+		"description"	=> "Miserable Member, based on the vBulletin plugin called Miserable User, makes it hell for anyone caught in its grasp. Worse than an ordinary ban, any users that are placed in Miserable Member's usergroups are constantly errored, have slow page loads, and other things that make the user think twice about doing anything on your board.",
 		"website"		=> "https://github.com/PenguinPaul/miserable-member",
 		"author"		=> "Paul H.",
 		"authorsite"	=> "http://www.paulhedman.com",
-		"version"		=> "1.1",
+		"version"		=> "1.2",
 		"guid" 			=> "",
-		"compatibility" => "*"
+		"compatibility" => "18*"
 	);
 }
 
@@ -35,7 +45,7 @@ function miserablemember_activate()
 		'name'			=> 'miserablemember',
 		'title'			=> 'Miserable Member Settings',
 		'description'	=> 'Settings for the Miserable Member plugin.',
-		'disporder'		=> 23,
+		'disporder'		=> 1,
 		'isdefault'		=> 0,
 	);
 	$db->insert_query('settinggroups', $group);
@@ -47,8 +57,8 @@ function miserablemember_activate()
 	$settings[] = array(
 		'name'			=> 'miserablemember_groups',
 		'title'			=> 'Miserable Groups',
-		'description'	=> 'A CSV of groups that are affected by Miserable Member.',
-		'optionscode'	=> 'text',
+		'description'	=> 'Groups that are affected by Miserable Member.',
+		'optionscode'	=> 'groupselect',
 		'value'			=> ''
 	);
 
@@ -100,16 +110,14 @@ function miserablemember_deactivate()
 
 function miserablemember()
 {
-	global $mybb;
-
-	$groups = explode(",", $mybb->settings['miserablemember_groups']);
-
-	if(in_array($mybb->user['usergroup'], $groups))
+	if(is_miserablemember())
 	{
+		global $mybb;
+
 		// Sleep for between 30 and 60 seconds
 		set_time_limit(61);
 		$sleeptime = rand(30, 60);
-		//sleep($sleeptime);
+		sleep($sleeptime);
 
 		// 25% chance of MyBB error
 		$mybberror = rand(1, 4);
@@ -120,30 +128,56 @@ function miserablemember()
 			shuffle($errorarray);
 			$error_handler->output_error(MYBB_GENERAL, $errorarray[0], "", "");
 		} else {
-			$other = rand(1,10);
+			$other = rand(0,99);
 
 			// When you dont get an error you have
 
-			// A 40% chance of getting a blank page
-			if($other <= 4) // $other 1, 2, 3, 4
+			// A 20% chance of getting a blank page
+			if($other < 20)
 			{
 				die;
 			}
 
+			// A 18% chance of getting no theme styling
+			elseif($other >= 20 && $other < 38)
+			{
+				global $stylesheets;
+
+				$stylesheets = '';
+			}
+
+			// A 2% chance of being being logged out
+			elseif($other >= 38 && $other < 40)
+			{
+				global $db, $session;
+
+				my_unsetcookie("mybbuser");
+				my_unsetcookie("sid");
+
+				if($mybb->user['uid'])
+				{
+					$time = TIME_NOW;
+					// Run this after the shutdown query from session system
+					$db->shutdown_query("UPDATE ".TABLE_PREFIX."users SET lastvisit='{$time}', lastactive='{$time}' WHERE uid='{$mybb->user['uid']}'");
+					$db->delete_query("sessions", "sid = '{$session->sid}'");
+				}
+			}
+
 			// A 20% chance of being redirected to the home page
-			elseif($other >= 5 && $other < 7) // $other 5, 6
+			elseif($other >= 40 && $other < 60)
 			{
 				header("Location: {$mybb->settings['bburl']}");
 			}
 
 			// A 20% chance of no permission page
-			elseif($other >= 7 && $other < 9) // $other 7, 8
+			elseif($other >= 60 && $other < 80)
 			{
+				global $theme;
 				error_no_permission();
 			}
 
 			// A 10% chance of being redirected to the homepage after a random amount of time
-			elseif($other == 9) // $other 9
+			elseif($other >= 80 && $other < 90)
 			{
 				global $plugins;
 
@@ -151,7 +185,7 @@ function miserablemember()
 			}
 
 			// Or a 10% chance that you get what you actaully wanted!
-			else // $other 10
+			else
 			{
 				return;
 			}
@@ -168,4 +202,30 @@ function miserablemember_waitredirect()
 	// Add the redirect to the head tag with a meta tag and script to make doubly sure ;)
 	$headerinclude .= "<noscript><meta http-equiv=\"refresh\" content=\"{$redirect_time}; url={$mybb->settings['bburl']}\"></noscript><script>setTimeout(function() { window.location.replace(\"{$mybb->settings['bburl']}\");}, {$redirect_time}000);</script>";
 }
-?>
+
+function miserablemember_post()
+{
+	if(is_miserablemember())
+	{
+		// 25% chance of losing post when submitting...
+		$postloss = rand(1, 4);
+		if($postloss == 1)
+		{
+			global $mybb;
+
+			if(THIS_SCRIPT == 'newthread')
+			{
+				$mybb->input['subject'] = '';
+			}
+			$mybb->input['icon'] = '';
+			$mybb->input['message'] = '';
+		}
+	}
+}
+
+function is_miserablemember($user=false)
+{
+	global $mybb;
+
+	return is_member($mybb->settings['miserablemember_groups'], $user);
+}
